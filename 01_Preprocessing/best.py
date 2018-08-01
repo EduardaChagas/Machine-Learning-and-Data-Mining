@@ -9,19 +9,16 @@ from sklearn.metrics import accuracy_score
 from sklearn.feature_selection import SelectKBest
 from sklearn.feature_selection import chi2
 
+
 def readFile():
     data = pd.read_csv('diabetes_dataset.csv')
     data_app = pd.read_csv('diabetes_app.csv')
     return data, data_app
 
 #“mean”, “median” e “most_frequent”
-def preProcessing(X):
-    feature_cols = ['Pregnancies', 'Glucose', 'BloodPressure', 'SkinThickness', 'Insulin', 'BMI', 'DiabetesPedigreeFunction', 'Age']
-    for i in feature_cols:
-        if i == 0 or i == 4 or i == 6 or i == 7:
-            X.iloc[:,X.columns.get_loc(i)] = X.iloc[:,X.columns.get_loc(i)].replace(np.NaN, X.iloc[:,X.columns.get_loc(i)].median())
-        else:
-            X.iloc[:,X.columns.get_loc(i)] = X.iloc[:,X.columns.get_loc(i)].replace(np.NaN, X.iloc[:,X.columns.get_loc(i)].mean())
+def preProcessing(X, myStrategy):
+    imputer = Imputer(missing_values='NaN', strategy=myStrategy, axis=0, verbose=0)
+    X = imputer.fit_transform(X)
     return X
 
 def normalization(X,strategy):
@@ -29,7 +26,7 @@ def normalization(X,strategy):
         X = MinMaxScaler(copy=True, feature_range=(0, 1)).fit_transform(X)
     else:
         X = MaxAbsScaler(copy=True).fit_transform(X) 
-    return X    
+    return X
 
 def knnCrossValidation(X):    
     X = np.array(X)
@@ -61,17 +58,17 @@ def sendSolution(y_pred):
     
 def select(X, X_app, y, nk):
     selector = SelectKBest(chi2, k=nk).fit(X, y)
-    X_new = pd.DataFrame(selector.transform(X)) 
-    X_new_app = pd.DataFrame(selector.transform(X_app)) 
+    X_new = selector.transform(X) 
+    X_new_app = selector.transform(X_app) 
     scores = selector.scores_
+    print(scores)
     return X_new, X_new_app, scores
 
 def defineScore(X_new, X_new_app, scores, myScore):
     j = 0
-    scores[myScore] = (scores[myScore] - min(scores))/(max(scores)-min(scores))
     for i in myScore:
-        X_new.iloc[:,j] = X_new.iloc[:,j] * scores[i]
-        X_new_app.iloc[:,j] = X_new_app.iloc[:,j] * scores[i]
+        X_new[:,j] = X_new[:,j] * scores[i]
+        X_new_app[:,j] = X_new_app[:,j] * scores[i]
         j = j + 1
     return X_new, X_new_app    
 
@@ -80,20 +77,17 @@ feature_cols = ['Pregnancies', 'Glucose', 'BloodPressure', 'SkinThickness', 'Ins
 X = data[feature_cols]
 X_app = data_app[feature_cols]
 y = data.Outcome
+X = preProcessing(X, 'most_frequent')
+X_new, X_new_app, scores = select(X, X_app, y, 4)
+#[ 56.78719827 966.08089449  10.27957012  47.94991797 451.37833585 73.48729994   4.15608261  72.56885168]
+##########################################################3
+myScore = [1,4,5,7]
+##########################################################3
+X_new, X_new_app = defineScore(X_new, X_new_app, scores, myScore)
+X_new = normalization(X_new,1)
+X_new_app = normalization(X_new_app,1)
+#X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=18)
+result = knnCrossValidation(X_new)
 
-X = preProcessing(X)
-
-X, X_app, scores = select(X, X_app, y, 5)
-myScore = [0,1,4,5,7]
-X, X_app = defineScore(X, X_app, scores, myScore)
-
-X = normalization(X,1)
-X_app = normalization(X_app,1)
-
-result = knnCrossValidation(X)
-sendSolution(result[9].predict(X_app))
-
-
-#Most frequent -> [ 56.78719827 965.33777135   9.60528973  50.15264773 500.98205102 74.11400957   4.15608261  72.56885168]
-#Mean -> [ 56.78719827 966.08089449  10.27957012  47.94991797 451.37833585 73.48729994   4.15608261  72.56885168]
-#Median -> [ 56.78719827 965.92837502  10.03084233  48.48588988 473.98464839 73.66906925   4.15608261  72.56885168]
+#y_pred = KNN(X_train,y_train,X_app,3)
+sendSolution(result[6].predict(X_new_app))
